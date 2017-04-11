@@ -1,0 +1,19 @@
+{
+    "manifest_version": 2,
+    "name": "Finch",
+    "version": "0.1",
+    "minimum_chrome_version": "10.0",
+    "permissions": [
+        "debugger", "tabs", "activeTab"
+    ],
+    "devtools_page": "finch_devtools.html",
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["content.js"]
+        }
+    ],
+    "background": {
+        "scripts": ["background.js"]
+    }
+}
