@@ -17,15 +17,16 @@ const port = chrome.runtime.connect({ name: "devtools" })
 chrome.devtools.panels.elements.onSelectionChanged.addListener(() => {
     // chrome.devtools.inspectedWindow.eval("console.log(window.getMatchedCSSRules($0))")
     // chrome.devtools.inspectedWindow.eval("console.log(window.getComputedStyle($0))")
+
+    log('▴ 💩')
 })
 
 chrome.devtools.inspectedWindow.onResourceContentCommitted.addListener((resource, content) => {
-    // chrome.devtools.inspectedWindow.eval("console.log('changed props')")
+    
     if(resource.type == 'stylesheet') {
         chrome.runtime.sendMessage({ type: 'cssChange', source: resource.url, css: content })
     }
 })
-
 
 
 

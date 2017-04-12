@@ -1,8 +1,11 @@
+import fixEncoding from "./fixEncoding"
+import { parseCSS } from "./parse"
 declare const $0: any
 
 interface StylesheetObject {
     source: string,
-    content: string
+    content: string,
+    utf8: boolean
 }
 
 const stylesheets: Object = {}
@@ -23,54 +26,69 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         case 'cssFetch':
             let stylesheetObj: StylesheetObject = message.css
-            stylesheets[stylesheetObj.source] = stylesheetObj.content
-            console.log(stylesheets)
+            if(!stylesheets.hasOwnProperty(stylesheetObj.source)) {
+                stylesheets[stylesheetObj.source] = {
+                    content: stylesheetObj.content,
+                    utf8: stylesheetObj.utf8
+                }
+                console.log(stylesheets)
+            }
             break
 
         case 'cssChange':
+            // parseCSS(message.css, message.source, 0)
             cssDiff(message.source, message.css)
             break
     }
     return true;
 })
 
-const cssDiff = (source, cssContent) => {
-    console.log(source)
+const cssDiff = (source, changedCss) => {
+    
     if(stylesheets.hasOwnProperty(source)) {
-        let sourceLength = stylesheets[source].length
 
-        for(let i = 0; i < sourceLength; i++) {
-            // Find first diff position
-            if (stylesheets[source][i] !== cssContent[i]) {
-
-                let ruleEndPos
-                for (ruleEndPos = i; ruleEndPos < sourceLength; ruleEndPos++) {
-                    if (stylesheets[source][ruleEndPos] == ';' || stylesheets[source][ruleEndPos] == '}') break
-                }
-
-                // Go back to get the rule
-                for (let j = i; j >= 0; j--) {
-                    if(stylesheets[source][j] == '}') {
-                        i = j+1
-                        break
-                    }
-                }
-
-                let fullRule = cssContent.substring(i, ruleEndPos)
-                let ruleParts = fullRule.split('{')
-                let selector = ruleParts[0]
-                let style = ruleParts[1].split(';').pop()
-                
-                console.log(fullRule)
-                console.log([selector, style])
-                
-                // console.log(cssContent.substring(i, ruleEndPos))
-
-
-                stylesheets[source] = cssContent
-                break
-            }
+        if(!stylesheets[source].utf8) {
+            changedCss = fixEncoding(changedCss)
         }
+
+        const parsed = parseCSS(changedCss, stylesheets[source].content, source, 0)
+        stylesheets[source].content = changedCss
+
+        // let sourceLength = stylesheets[source].length
+
+        // for(let i = 0; i < sourceLength; i++) {
+        //     // Find first diff position
+        //     if (stylesheets[source][i] !== changedCss[i]) {
+
+
+        //         let ruleEndPos
+        //         for (ruleEndPos = i; ruleEndPos < sourceLength; ruleEndPos++) {
+        //             if (stylesheets[source][ruleEndPos] == ';' || stylesheets[source][ruleEndPos] == '}') break
+        //         }
+
+        //         // Go back to get the rule
+        //         for (let j = i; j >= 0; j--) {
+        //             if(stylesheets[source][j] == '}') {
+        //                 i = j+1
+        //                 break
+        //             }
+        //         }
+
+        //         let fullRule = changedCss.substring(i, ruleEndPos)
+        //         let ruleParts = fullRule.split('{')
+        //         let selector = ruleParts[0]
+        //         let style = ruleParts[1].split(';').pop()
+                
+        //         console.log(fullRule)
+        //         console.log([selector, style])
+                
+        //         // console.log(changedCss.substring(i, ruleEndPos))
+
+
+        //         stylesheets[source] = changedCss
+        //         break
+        //     }
+        // }
 
     } else {
         console.log('nope')
