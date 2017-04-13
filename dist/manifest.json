@@ -4,7 +4,7 @@
     "version": "0.1",
     "minimum_chrome_version": "10.0",
     "permissions": [
-        "debugger", "tabs", "activeTab"
+        "debugger", "tabs", "activeTab", "storage", "unlimitedStorage"
     ],
     "devtools_page": "finch_devtools.html",
     "content_scripts": [

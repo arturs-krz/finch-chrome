@@ -10,28 +10,42 @@ interface StylesheetObject {
 
 const stylesheets: Object = {}
 
+const removeStylesheet = (tabId, removeInfo) => {
+    for (let source in stylesheets) {
+        if (stylesheets[source].tab == tabId) {
+            console.log('Removing ' + source + ' for tab ' + tabId)
+            delete stylesheets[source]
+        }
+    }
+}
+chrome.tabs.onRemoved.addListener(removeStylesheet)
+
+chrome.tabs.onActivated.addListener(activeInfo => {
+    console.log('Activated tab ' + activeInfo.tabId)
+    chrome.tabs.sendMessage(activeInfo.tabId, { request: 'load'})
+})
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    chrome.tabs.sendMessage(tabId, { request: 'load'})
+})
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.type) {
-        case 'inject':
-            let tabId = message.tabId
-            console.log(tabId)
-            chrome.tabs.executeScript(tabId, {file: message.scriptToInject})
-
-            // startDebugger(tabId)
-            break
-
+    
         case 'log':
             console.log(message.message)
             break
 
         case 'cssFetch':
             let stylesheetObj: StylesheetObject = message.css
-            if(!stylesheets.hasOwnProperty(stylesheetObj.source)) {
+            const currentTabId = sender.tab.id
+
+            if (!stylesheets.hasOwnProperty(stylesheetObj.source)) {
                 stylesheets[stylesheetObj.source] = {
                     content: stylesheetObj.content,
-                    utf8: stylesheetObj.utf8
+                    utf8: stylesheetObj.utf8,
+                    tab: currentTabId
                 }
-                console.log(stylesheets)
+                console.log('Loaded ' + stylesheetObj.source)
             }
             break
 
@@ -44,16 +58,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 })
 
 const cssDiff = (source, changedCss) => {
-    
-    if(stylesheets.hasOwnProperty(source)) {
 
-        if(!stylesheets[source].utf8) {
+    if (stylesheets.hasOwnProperty(source)) {
+
+        if (!stylesheets[source].utf8) {
             changedCss = fixEncoding(changedCss)
         }
 
-        const parsed = parseCSS(changedCss, stylesheets[source].content, source, 0)
-        stylesheets[source].content = changedCss
-
+        const rule = parseCSS(changedCss, stylesheets[source].content, source, 0)
+        if(rule) {
+            console.log(rule)
+            stylesheets[source].content = changedCss
+        }
         // let sourceLength = stylesheets[source].length
 
         // for(let i = 0; i < sourceLength; i++) {
@@ -78,10 +94,10 @@ const cssDiff = (source, changedCss) => {
         //         let ruleParts = fullRule.split('{')
         //         let selector = ruleParts[0]
         //         let style = ruleParts[1].split(';').pop()
-                
+
         //         console.log(fullRule)
         //         console.log([selector, style])
-                
+
         //         // console.log(changedCss.substring(i, ruleEndPos))
 
 

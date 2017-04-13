@@ -2,7 +2,8 @@ import { hexToRGBA, parseMedia } from "./helpers"
 
 export function parseCSS(css: string, originalCss: string, source: string, cssIndex: number) {
 
-    var diffFound = false;
+    let diffFound = false;
+    let changedDeclaration = null;
 
     const commentre = /\/\*[^*]*\*+([^/*][^*]*\*+)*\//g
 
@@ -235,10 +236,7 @@ export function parseCSS(css: string, originalCss: string, source: string, cssIn
         let newCssValue = match(valRegex);
 
         if (originalCssValue) {
-            if(!diffFound && newCssValue[0] != originalCssValue[0]) {
-                console.log([originalCssValue[0], newCssValue[0]])
-                diffFound = true
-            }
+            if(!diffFound && newCssValue[0] != originalCssValue[0]) diffFound = true;
         }
 
         newCssValue = newCssValue ? trim(newCssValue[0]).replace(commentre, '') : ''
@@ -291,9 +289,9 @@ export function parseCSS(css: string, originalCss: string, source: string, cssIn
                 comments(decls);
             }
 
-            if(diffFound) {
+            if(diffFound && !changedDeclaration) {
+                changedDeclaration = decl
                 console.log(decl)   
-                break;
             }
         }
 
@@ -422,8 +420,6 @@ export function parseCSS(css: string, originalCss: string, source: string, cssIn
         var style = comments().concat(rules());
 
         if (!close()) return error("@media missing '}'");
-
-
         const parsedMedia = parseMedia(media)
 
         return pos({
@@ -470,8 +466,6 @@ export function parseCSS(css: string, originalCss: string, source: string, cssIn
         while (decl = declaration()) {
             decls.push(decl);
             decls = decls.concat(comments());
-
-            if(diffFound) break;
         }
 
         if (!close()) return error("@page missing '}'");
@@ -526,8 +520,6 @@ export function parseCSS(css: string, originalCss: string, source: string, cssIn
         while (decl = declaration()) {
             decls.push(decl);
             decls = decls.concat(comments());
-
-            if(diffFound) break;
         }
 
         if (!close()) return error("@font-face missing '}'");
@@ -648,7 +640,6 @@ export function parseCSS(css: string, originalCss: string, source: string, cssIn
                 }
 
                 let childRules = flattenTree(rule.rules, currentMedia)
-
                 output = output.concat(childRules)
 
             }
@@ -661,14 +652,19 @@ export function parseCSS(css: string, originalCss: string, source: string, cssIn
 
     const finalCSS = rules()
     let finalRules = flattenTree(finalCSS)
-    
-    console.log(finalRules.pop())
 
-   return {
-      rules: finalRules,
-      colors: cssColors,
-      fonts: cssFonts
-   }
+    if(diffFound) {
+        let rule = finalRules.pop()
+        rule.declarations = [changedDeclaration]
+
+        return rule
+    } else return null
+
+//    return {
+//       rules: finalRules,
+//       colors: cssColors,
+//       fonts: cssFonts
+//    }
 
 }
 
