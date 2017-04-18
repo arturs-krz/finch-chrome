@@ -8,9 +8,73 @@ interface StylesheetObject {
     utf8: boolean
 }
 
+interface RulesContainer {
+    [domainName: string]: {
+        [ruleName: string]: Object[]
+    }
+}
+
+let currentDomain: string = null
+const tabDomains: Object = {}
+
+/**
+ * Rulesets for different domains (from chrome storage)
+ */
+const styleRules: RulesContainer = {}
+
+/**
+ * Gets style rules for the given domain from chrome storage
+ */
+const getDomainRules = (domain: string) => {
+    const rulesetId = 'rules_' + domain
+    chrome.storage.local.get(rulesetId, items => {
+        if(items[rulesetId]) {
+            console.log('Fetched rules for domain: ' + domain)
+            styleRules[domain] = items[rulesetId]
+            console.log(styleRules)
+        }
+    })
+}
+
+const storeDomainRules = (domain: string) => {
+    if(styleRules.hasOwnProperty(domain)) {
+        console.log('Saving rules for ' + domain)
+        const rulesetId = 'rules_' + domain
+        const toStore = {}
+        toStore[rulesetId] = styleRules[domain]
+        chrome.storage.local.set(toStore)
+    }
+}
+
+const getDomainFromUrl = (url: string) => {
+    const domainRegex = /\/\/([^\/?#]+)/i
+    const result = domainRegex.exec(url)
+    if(result) {
+        console.log(result[1])
+        return result[1]
+    } else return null
+}
+
+const loadStylesheetsForCurrentTab = (tabId: number) => {
+    let loaded = false
+    for(let source in stylesheets) {
+        if(stylesheets[source].tab == tabId) {
+            console.log('Stylesheets for ' + tabId + ' already loaded')
+            loaded = true
+            break
+        }
+    }
+    if(!loaded) chrome.tabs.sendMessage(tabId, { request: 'load'})
+}
+
+/**
+ * Contains currently loaded full css files
+ */
 const stylesheets: Object = {}
 
-const removeStylesheet = (tabId, removeInfo) => {
+// chrome.storage.local.clear()
+
+const removeStylesheet = (tabId) => {
     for (let source in stylesheets) {
         if (stylesheets[source].tab == tabId) {
             console.log('Removing ' + source + ' for tab ' + tabId)
@@ -18,14 +82,47 @@ const removeStylesheet = (tabId, removeInfo) => {
         }
     }
 }
-chrome.tabs.onRemoved.addListener(removeStylesheet)
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+    let domain = tabDomains[tabId]
+    storeDomainRules(domain)        // store rules when tab is closed
+    removeStylesheet(tabId)
+    delete tabDomains[tabId]
+})
 
 chrome.tabs.onActivated.addListener(activeInfo => {
     console.log('Activated tab ' + activeInfo.tabId)
-    chrome.tabs.sendMessage(activeInfo.tabId, { request: 'load'})
+
+    chrome.tabs.sendMessage(activeInfo.tabId, { request: 'ping' }, response => {
+        if(response != 'pong') {
+            chrome.tabs.executeScript(null, {file: 'content.js'}, result => {
+                loadStylesheetsForCurrentTab(activeInfo.tabId)
+            })
+        } else {
+            loadStylesheetsForCurrentTab(activeInfo.tabId)
+        }
+    })
+
+    chrome.tabs.get(activeInfo.tabId, tab => {
+        if(tab.url) {
+            currentDomain = getDomainFromUrl(tab.url)
+            tabDomains[tab.id] = currentDomain
+            getDomainRules(currentDomain)
+        }
+    })
+
+    
 })
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    chrome.tabs.sendMessage(tabId, { request: 'load'})
+    if(changeInfo.url) {
+        storeDomainRules(currentDomain) // save previous 
+
+        currentDomain = getDomainFromUrl(changeInfo.url)
+        tabDomains[tabId] = currentDomain
+        console.log('Loaded ' + currentDomain)
+        getDomainRules(currentDomain)
+    } else if(currentDomain != null) storeDomainRules(currentDomain)
+
+    loadStylesheetsForCurrentTab(tabId)
 })
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -45,7 +142,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     utf8: stylesheetObj.utf8,
                     tab: currentTabId
                 }
-                console.log('Loaded ' + stylesheetObj.source)
+                console.log('Loaded stylesheet ' + stylesheetObj.source)
             }
             break
 
@@ -68,7 +165,17 @@ const cssDiff = (source, changedCss) => {
         const rule = parseCSS(changedCss, stylesheets[source].content, source, 0)
         if(rule) {
             console.log(rule)
+
+            // Replace source stylesheet with modified one (for comparison only)
             stylesheets[source].content = changedCss
+
+            // Save the new rule for the active domain
+            if(!styleRules.hasOwnProperty(currentDomain)) styleRules[currentDomain] = {}
+            if(!styleRules[currentDomain].hasOwnProperty(rule.selector)) {
+                styleRules[currentDomain][rule.selector] = [rule]
+            } else {
+                styleRules[currentDomain][rule.selector].push(rule)
+            }
         }
         // let sourceLength = stylesheets[source].length
 

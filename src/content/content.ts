@@ -8,6 +8,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             console.log('Fetching stylesheets')
             loadStylesheets()
             break;
+
+        case 'ping':
+            sendResponse('pong')
+            break;
     }
     return true;
 })
